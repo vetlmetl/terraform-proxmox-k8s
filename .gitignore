@@ -1,0 +1,28 @@
+# Terraform state files (contain sensitive credentials)
+*.tfstate
+*.tfstate.backup
+
+# Terraform download/cache directory
+.terraform/
+
+# Provider lock file (safe to commit, but exclude for clean checkout)
+.terraform.lock.hcl
+
+# Environment-specific overrides (may contain secrets or infrastructure details)
+terraform.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Partial backend config (bucket name / infra details) — keep .example committed
+backend.hcl
+
+# OS / editor artifacts
+.DS_Store
+*.log
+CLAUDE.md
+AGENTS.md
+todo.md
+
+# Cluster credentials exported from Terraform outputs
+kubeconfig.yaml
+talosconfig.yaml
