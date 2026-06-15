@@ -4,9 +4,9 @@ terraform {
   # Credentials, region, and the S3 endpoint are read from environment variables:
   #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, AWS_ENDPOINT_URL_S3
   backend "s3" {
-    key          = "prox-terr-bpg/terraform.tfstate"
-    encrypt      = true
-    use_lockfile = true # native S3 state locking (Terraform >= 1.10); no DynamoDB needed
+    key            = "prox-terr-bpg/terraform.tfstate"
+    encrypt        = true
+    use_lockfile   = true # native S3 state locking (Terraform >= 1.10); no DynamoDB needed
     use_path_style = true # most non-AWS S3 gateways require path-style addressing
 
     # The following skips are required for non-AWS S3-compatible providers,
@@ -49,8 +49,10 @@ provider "proxmox" {
 # ─── Talos cluster module ──────────────────────────────────────────────────
 
 module "talos" {
-  source  = "bbtechsys/talos/proxmox"
-  version = "0.1.5"
+  # Local fork (../git/terraform-proxmox-talos) while the cluster_endpoint /
+  # per-node config-patch changes are pending upstream as an MR. Revert to the
+  # registry source + version once merged and released.
+  source = "../git/terraform-proxmox-talos"
 
   talos_cluster_name = var.cluster_name
   talos_version      = var.talos_version
@@ -61,6 +63,15 @@ module "talos" {
   proxmox_worker_vm_disk_size  = var.worker_disk_size
   proxmox_image_datastore      = var.image_datastore
   proxmox_iso_datastore        = var.iso_datastore
+
+  # Predictable node IPs via fixed MACs + OPNsense DHCP reservations.
+  control_plane_mac_addresses = local.control_node_macs
+  worker_mac_addresses        = local.worker_node_macs
+
+  # HA Kubernetes API endpoint via a shared Talos VIP. See cluster_network.tf.
+  cluster_endpoint               = "https://${local.cluster_vip}:6443"
+  control_machine_config_patches = local.control_shared_patches
+  worker_machine_config_patches  = local.worker_shared_patches
 }
 
 # ─── Outputs ───────────────────────────────────────────────────────────────
