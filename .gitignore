@@ -5,9 +5,6 @@
 # Terraform download/cache directory
 .terraform/
 
-# Provider lock file (safe to commit, but exclude for clean checkout)
-.terraform.lock.hcl
-
 # Environment-specific overrides (may contain secrets or infrastructure details)
 terraform.tfvars
 *.auto.tfvars
