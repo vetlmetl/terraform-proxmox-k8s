@@ -11,7 +11,6 @@
 
 locals {
   cluster_vip = "192.168.88.200"
-  nameservers = ["192.168.88.101"]
 
   # MAC last octet mirrors the IP last octet for an obvious reservation mapping.
   control_node_macs = {
@@ -25,15 +24,16 @@ locals {
     "test-worker-2" = "bc:24:11:88:02:06" # -> 192.168.88.206
   }
 
-  # Shared control-plane patch: install disk, DNS, the VIP (dhcp stays TRUE so
-  # the node keeps its DHCP address), and the VIP in apiserver certSANs so the
-  # serving cert is valid for the endpoint.
+  # Shared control-plane patch: install disk, the VIP (dhcp stays TRUE so the
+  # node keeps its DHCP address), and the VIP in apiserver certSANs so the
+  # serving cert is valid for the endpoint. DNS is left to DHCP.
+  # NOTE: the install disk must be set here — passing this variable replaces the
+  # module's default disk patch rather than merging with it.
   control_shared_patches = [
     yamlencode({
       machine = {
         install = { disk = "/dev/vda" }
         network = {
-          nameservers = local.nameservers
           interfaces = [{
             deviceSelector = { driver = "virtio_net" }
             dhcp           = true
@@ -47,12 +47,6 @@ locals {
     })
   ]
 
-  worker_shared_patches = [
-    yamlencode({
-      machine = {
-        install = { disk = "/dev/vda" }
-        network = { nameservers = local.nameservers }
-      }
-    })
-  ]
+  # Workers need no shared patch: the module's default already sets the install
+  # disk (/dev/vda) and DNS comes from DHCP.
 }

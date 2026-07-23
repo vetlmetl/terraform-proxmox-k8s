@@ -49,10 +49,10 @@ provider "proxmox" {
 # ─── Talos cluster module ──────────────────────────────────────────────────
 
 module "talos" {
-  # Local fork (../git/terraform-proxmox-talos) while the cluster_endpoint /
-  # per-node config-patch changes are pending upstream as an MR. Revert to the
-  # registry source + version once merged and released.
-  source = "../git/terraform-proxmox-talos"
+  # Personal fork of bbtechsys/talos/proxmox, pinned to a commit SHA. Adds the
+  # configurable cluster_endpoint and per-node config patches used below (not in
+  # the registry module). Bump the ref to adopt fork changes.
+  source = "git::ssh://git@github.com/vetlmetl/terraform-proxmox-talos.git?ref=265bd45a9388f2aea8975508616923308042dd97"
 
   talos_cluster_name = var.cluster_name
   talos_version      = var.talos_version
@@ -69,9 +69,9 @@ module "talos" {
   worker_mac_addresses        = local.worker_node_macs
 
   # HA Kubernetes API endpoint via a shared Talos VIP. See cluster_network.tf.
+  # Workers use the module's default machine config patch (install disk only).
   cluster_endpoint               = "https://${local.cluster_vip}:6443"
   control_machine_config_patches = local.control_shared_patches
-  worker_machine_config_patches  = local.worker_shared_patches
 }
 
 # ─── Outputs ───────────────────────────────────────────────────────────────
