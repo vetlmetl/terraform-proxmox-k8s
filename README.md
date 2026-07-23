@@ -19,12 +19,18 @@ internet.
 - **Predictable node IPs** via fixed MAC addresses + OPNsense DHCP reservations.
   Nodes stay on DHCP (which keeps the module's guest-agent IP discovery stable);
   the reservations pin each MAC to a fixed address.
+- **Persistent storage** — two CSI layers, deployed as Talos inlineManifests:
+  [Longhorn](https://longhorn.io/) (default `longhorn` StorageClass, replicated
+  RWO block on the worker SSDs) and
+  [csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-nfs) (`nfs`
+  StorageClass, RWX/bulk on an NFS share). See [Storage](#storage).
 - **Remote state** on an S3-compatible object store with native locking and
   encryption.
-- **Forked module** — the cluster consumes a local fork of
-  [`bbtechsys/talos/proxmox`](https://registry.terraform.io/modules/bbtechsys/talos/proxmox)
-  at `../git/terraform-proxmox-talos`, which adds a configurable
-  `cluster_endpoint` (the change that enables the VIP). See [Module fork](#module-fork).
+- **Forked module** — the cluster consumes a personal fork of
+  [`bbtechsys/talos/proxmox`](https://registry.terraform.io/modules/bbtechsys/talos/proxmox),
+  [`vetlmetl/terraform-proxmox-talos`](https://github.com/vetlmetl/terraform-proxmox-talos),
+  pinned by release tag. It adds a required `cluster_endpoint` (the change that
+  enables the VIP). See [Module fork](#module-fork).
 
 ### Network layout
 
@@ -49,6 +55,9 @@ Talos assigns its own node hostnames. Gateway `192.168.88.1`, DNS
 | `main.tf`            | Providers, S3 backend, and the Talos module call.                       |
 | `variables.tf`       | Input variables with validation.                                        |
 | `cluster_network.tf` | VIP, node MAC/IP maps, and the Talos config patches (DNS, VIP, certSANs).|
+| `storage.tf`         | Worker `/var/lib/longhorn` mount and the Longhorn + NFS CSI manifests.   |
+| `metrics_server.tf`  | metrics-server inlineManifest (for `kubectl top`).                       |
+| `manifests/`         | Vendored, pinned add-on manifests applied as Talos inlineManifests.      |
 | `terraform.tfvars`   | Environment-specific values. **Gitignored** (see below).                |
 | `backend.hcl`        | Partial backend config (bucket name). **Gitignored.**                   |
 | `backend.hcl.example`| Template for `backend.hcl`.                                             |
@@ -63,6 +72,8 @@ gitignored — they hold secrets or infrastructure detail.
 - An S3-compatible bucket for remote state (e.g. MinIO, Garage, Backblaze).
 - `talosctl` and `kubectl` for operating the cluster.
 - DHCP server configured with the reservations below.
+- An NFS server for the `nfs` StorageClass, exporting a share to the node subnet
+  with `rw,no_root_squash` (see [Storage](#storage)).
 
 ### DHCP
 
@@ -102,8 +113,9 @@ cp backend.hcl.example backend.hcl   # then set: bucket = "<your-bucket>"
 ### Variables
 
 Set cluster/connection values in `terraform.tfvars` (cluster name, Talos
-version, node maps, disk sizes, datastores, Proxmox endpoint, SSH details). See
-`variables.tf` for the full list and validation rules.
+version, `talos_schematic_id`, node maps, disk sizes, datastores, Proxmox
+endpoint, SSH details, and the `nfs_server` / `nfs_share` for the `nfs`
+StorageClass). See `variables.tf` for the full list and validation rules.
 
 ## Usage
 
@@ -130,13 +142,65 @@ Both outputs are marked sensitive and point at the VIP (`192.168.88.200`).
 Power off whichever control node currently holds the VIP; `kubectl` should keep
 working within seconds as the VIP migrates to another control node.
 
+## Storage
+
+Two CSI layers are provisioned as Talos cluster inlineManifests (vendored, pinned
+under `manifests/`, wired up in `storage.tf`):
+
+| StorageClass         | Driver           | Backing            | Modes | Use                                   |
+| -------------------- | ---------------- | ------------------ | ----- | ------------------------------------- |
+| `longhorn` (default) | Longhorn         | worker SSDs (×2 replicas) | RWO   | Fast, replicated block for app state. |
+| `nfs`                | csi-driver-nfs   | external NFS share | RWX   | Bulk / shared volumes, backup targets. |
+
+**Longhorn** requires the `iscsi-tools` + `util-linux-tools` Talos extensions,
+baked into the image via `talos_schematic_id`, and a `/var/lib/longhorn` kubelet
+bind mount on workers (`worker_machine_config_patches`). Both are set for you in
+`storage.tf` / `terraform.tfvars`.
+
+**NFS** is environment-specific — set `nfs_server` and `nfs_share` in
+`terraform.tfvars`. The export must permit the node subnet with `rw` and
+`no_root_squash` (the provisioner creates per-volume subdirectories as root),
+e.g. in the server's `/etc/exports`:
+
+```
+/srv/k8s  192.168.88.200/28(rw,sync,no_subtree_check,no_root_squash)
+```
+
+The `nfs` StorageClass sets `mountPermissions: "0777"` so non-root pods can write
+(NFS ignores `fsGroup`).
+
+## Rebuilding the cluster
+
+A change that recreates **all** VMs at once — a new `talos_schematic_id`, a Talos
+image change, or a `terraform destroy` — must be applied in **two steps**, or the
+Talos provider aborts with an inconsistent-plan error and the fresh cluster is
+left unbootstrapped:
+
+```bash
+# 1. Create the VMs first, so node IPs are known before the config step.
+terraform apply \
+  -target=module.talos.proxmox_virtual_environment_vm.talos_control_vm \
+  -target=module.talos.proxmox_virtual_environment_vm.talos_worker_vm
+
+# 2. Apply the rest (machine config, bootstrap, kubeconfig).
+terraform apply
+
+# 3. If the API never comes up (kubectl → connection refused on VIP:6443 for
+#    >5 min), the bootstrap resource went stale — force it:
+terraform apply \
+  -replace='module.talos.talos_machine_bootstrap.talos_bootstrap' \
+  -replace='module.talos.talos_cluster_kubeconfig.talos_kubeconfig'
+```
+
 ## Module fork
 
-`main.tf` points `module "talos"` at a **local path**
-(`../git/terraform-proxmox-talos`) rather than the registry, because the cluster
-relies on a `cluster_endpoint` override that is not yet released upstream. The
-change is proposed as a backward-compatible PR. Once merged and released, switch
-back to the registry source with a pinned `version`.
+`main.tf` points `module "talos"` at a personal fork,
+[`vetlmetl/terraform-proxmox-talos`](https://github.com/vetlmetl/terraform-proxmox-talos),
+pinned by **release tag** in the `source` (`?ref=vX.Y.Z`) rather than the
+registry, because the cluster relies on a required `cluster_endpoint` (the VIP
+override) not present upstream. To adopt module changes: make them in the fork,
+cut a SemVer release tag, bump the `?ref=` in `main.tf`, and re-run
+`terraform init -upgrade`.
 
 ## Security notes
 
