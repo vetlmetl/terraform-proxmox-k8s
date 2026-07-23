@@ -56,6 +56,7 @@ module "talos" {
 
   talos_cluster_name = var.cluster_name
   talos_version      = var.talos_version
+  talos_schematic_id = var.talos_schematic_id
   control_nodes      = var.control_nodes
   worker_nodes       = var.worker_nodes
 
@@ -69,9 +70,21 @@ module "talos" {
   worker_mac_addresses        = local.worker_node_macs
 
   # HA Kubernetes API endpoint via a shared Talos VIP. See cluster_network.tf.
-  # Workers use the module's default machine config patch (install disk only).
-  cluster_endpoint               = "https://${local.cluster_vip}:6443"
-  control_machine_config_patches = concat(local.control_shared_patches, local.cluster_addon_patches)
+  cluster_endpoint = "https://${local.cluster_vip}:6443"
+
+  # Control-plane patches: network/VIP (cluster_network.tf), metrics-server
+  # (metrics_server.tf), and the storage add-on inlineManifests (storage.tf).
+  # Talos merges the list in order.
+  control_machine_config_patches = concat(
+    local.control_shared_patches,
+    local.cluster_addon_patches,
+    local.storage_addon_patches,
+  )
+
+  # Worker patches: install disk + the /var/lib/longhorn kubelet mount Longhorn
+  # requires (storage.tf). Overriding this replaces the module default, so the
+  # install disk is re-included there.
+  worker_machine_config_patches = local.worker_machine_config_patches
 }
 
 # ─── Outputs ───────────────────────────────────────────────────────────────

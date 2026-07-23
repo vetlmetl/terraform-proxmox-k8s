@@ -20,6 +20,22 @@ variable "talos_version" {
   }
 }
 
+variable "talos_schematic_id" {
+  # Talos Factory schematic (https://factory.talos.dev) — determines which
+  # system extensions are baked into the node image. The default here carries
+  # qemu-guest-agent + iscsi-tools + util-linux-tools (the last two are required
+  # by Longhorn; see storage.tf). Changing this changes the image => node
+  # reinstall (destroy + apply), not an in-place update.
+  description = "Talos Factory schematic ID (selects baked-in system extensions)"
+  type        = string
+  default     = "88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b"
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.talos_schematic_id))
+    error_message = "Schematic ID must be a 64-character hex string."
+  }
+}
+
 variable "control_nodes" {
   description = "Map of control node names to Proxmox node names"
   type        = map(string)
@@ -67,6 +83,32 @@ variable "iso_datastore" {
   type        = string
 }
 
+# ─── Persistent storage (CSI) ─────────────────────────────────────────────
+# Longhorn (SSD-backed, in-cluster replicated block) is deployed as a Talos
+# inlineManifest and needs no root variables. The NFS CSI driver's StorageClass
+# is environment-specific, so its backing share is configured here. See
+# storage.tf.
+
+variable "nfs_server" {
+  description = "Hostname/IP of the NFS server that backs the `nfs` StorageClass (must be reachable from the worker subnet)"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9._-]+$", var.nfs_server))
+    error_message = "NFS server must be a bare hostname or IP (no scheme or port)."
+  }
+}
+
+variable "nfs_share" {
+  description = "Exported path on the NFS server used for dynamically provisioned PVCs (e.g. /mnt/pool/k8s)"
+  type        = string
+
+  validation {
+    condition     = can(regex("^/", var.nfs_share))
+    error_message = "NFS share must be an absolute path starting with '/'."
+  }
+}
+
 # ─── Proxmox connection variables ─────────────────────────────────────────
 
 variable "proxmox_endpoint" {
@@ -112,6 +154,6 @@ variable "proxmox_ssh_username" {
 }
 
 variable "proxmox_api_token" {
-  description = "Proxmox API token (e.g. terraform@pam!provision=<uuid>). Pass via -var on the command line."
+  description = "Proxmox API token (e.g. terraform@pam!provision=<uuid>). Supply via the TF_VAR_proxmox_api_token env var to keep it out of shell history."
   type        = string
 }
