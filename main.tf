@@ -52,7 +52,7 @@ module "talos" {
   # Personal fork of bbtechsys/talos/proxmox, pinned to a release tag. Adds the
   # required cluster_endpoint used below (not in the registry module).
   # Bump the tag to adopt fork changes.
-  source = "git::https://github.com/vetlmetl/terraform-proxmox-talos.git?ref=v1.0.2"
+  source = "git::https://github.com/vetlmetl/terraform-proxmox-talos.git?ref=v2.0.0"
 
   talos_cluster_name = var.cluster_name
   talos_version      = var.talos_version
@@ -65,12 +65,16 @@ module "talos" {
   proxmox_image_datastore      = var.image_datastore
   proxmox_iso_datastore        = var.iso_datastore
 
-  # Predictable node IPs via fixed MACs + OPNsense DHCP reservations.
+  # Predictable node IPs via fixed MACs + router DHCP reservations.
   control_plane_mac_addresses = local.control_node_macs
   worker_mac_addresses        = local.worker_node_macs
 
   # HA Kubernetes API endpoint via a shared Talos VIP. See cluster_network.tf.
   cluster_endpoint = "https://${local.cluster_vip}:6443"
+
+  # Subnet the nodes get DHCP addresses on; the module matches this to pick each
+  # node's primary IP from the guest agent (the VIP above is excluded).
+  node_ipv4_cidr = local.node_ipv4_cidr
 
   # Control-plane patches: network/VIP (cluster_network.tf), metrics-server
   # (metrics_server.tf), and the storage add-on inlineManifests (storage.tf).

@@ -6,7 +6,7 @@ Linux](https://www.talos.dev/) Kubernetes cluster on Proxmox VE, built on the
 [`siderolabs/talos`](https://registry.terraform.io/providers/siderolabs/talos)
 providers.
 
-The cluster runs in a home lab: Proxmox sits behind an OPNsense firewall with a
+The cluster runs in a home lab: Proxmox sits behind a firewall/router with a
 public IP, and the cluster is intended to host and expose small projects to the
 internet.
 
@@ -16,7 +16,7 @@ internet.
 - **HA API endpoint via a shared Talos VIP** (`192.168.88.200`). The Kubernetes
   API is reached through the floating VIP, not a single node, so losing the VIP
   holder does not take down API access.
-- **Predictable node IPs** via fixed MAC addresses + OPNsense DHCP reservations.
+- **Predictable node IPs** via fixed MAC addresses + router DHCP reservations.
   Nodes stay on DHCP (which keeps the module's guest-agent IP discovery stable);
   the reservations pin each MAC to a fixed address.
 - **Persistent storage** — two CSI layers, deployed as Talos inlineManifests:
@@ -208,7 +208,7 @@ cut a SemVer release tag, bump the `?ref=` in `main.tf`, and re-run
   they are gitignored.
 - Do not expose the Kubernetes API (`6443`) or Talos API (`50000`) to the
   internet. Expose workloads via an ingress controller and forward only `80/443`
-  on OPNsense.
+  on the router.
 
 ## License
 
