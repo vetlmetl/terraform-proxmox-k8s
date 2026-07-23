@@ -49,10 +49,10 @@ provider "proxmox" {
 # ─── Talos cluster module ──────────────────────────────────────────────────
 
 module "talos" {
-  # Personal fork of bbtechsys/talos/proxmox, pinned to a commit SHA. Adds the
+  # Personal fork of bbtechsys/talos/proxmox, pinned to a release tag. Adds the
   # required cluster_endpoint used below (not in the registry module).
-  # Bump the ref to adopt fork changes.
-  source = "git::ssh://git@github.com/vetlmetl/terraform-proxmox-talos.git?ref=3ca425687d02e91fa118056515b5c58488db25af"
+  # Bump the tag to adopt fork changes.
+  source = "git::ssh://git@github.com/vetlmetl/terraform-proxmox-talos.git?ref=v1.0.0"
 
   talos_cluster_name = var.cluster_name
   talos_version      = var.talos_version
