@@ -51,6 +51,78 @@ variable "worker_nodes" {
   type        = map(string)
 }
 
+# ─── Compute variables ────────────────────────────────────────────────────
+# VM CPU/memory sizing. Defaults match the module's own defaults, so leaving
+# these unset preserves current behaviour.
+
+variable "control_vm_cores" {
+  description = "Number of CPU cores per control-plane VM"
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.control_vm_cores >= 1
+    error_message = "Control VM cores must be at least 1."
+  }
+}
+
+variable "worker_vm_cores" {
+  description = "Number of CPU cores per worker VM"
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.worker_vm_cores >= 1
+    error_message = "Worker VM cores must be at least 1."
+  }
+}
+
+variable "control_vm_memory" {
+  description = "Memory in MB per control-plane VM"
+  type        = number
+  default     = 4096
+
+  validation {
+    condition     = var.control_vm_memory >= 2048
+    error_message = "Control VM memory must be at least 2048 MB."
+  }
+}
+
+variable "worker_vm_memory" {
+  description = "Memory in MB per worker VM"
+  type        = number
+  default     = 4096
+
+  validation {
+    condition     = var.worker_vm_memory >= 2048
+    error_message = "Worker VM memory must be at least 2048 MB."
+  }
+}
+
+# ─── Network variables ────────────────────────────────────────────────────
+
+variable "network_bridge" {
+  description = "Proxmox network bridge the node NICs attach to"
+  type        = string
+  default     = "vmbr0"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9]+$", var.network_bridge))
+    error_message = "Network bridge must be an alphanumeric interface name (e.g. vmbr0)."
+  }
+}
+
+variable "network_vlan_id" {
+  description = "VLAN ID to tag the node NICs with; null leaves them untagged"
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.network_vlan_id == null || (var.network_vlan_id >= 1 && var.network_vlan_id <= 4094)
+    error_message = "VLAN ID must be between 1 and 4094, or null for no tag."
+  }
+}
+
 # ─── Storage variables ────────────────────────────────────────────────────
 
 variable "control_disk_size" {

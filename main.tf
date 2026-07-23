@@ -65,6 +65,14 @@ module "talos" {
   proxmox_image_datastore      = var.image_datastore
   proxmox_iso_datastore        = var.iso_datastore
 
+  # VM sizing (cores/memory) and NIC placement (bridge/VLAN).
+  proxmox_control_vm_cores  = var.control_vm_cores
+  proxmox_worker_vm_cores   = var.worker_vm_cores
+  proxmox_control_vm_memory = var.control_vm_memory
+  proxmox_worker_vm_memory  = var.worker_vm_memory
+  proxmox_network_bridge    = var.network_bridge
+  proxmox_network_vlan_id   = var.network_vlan_id
+
   # Predictable node IPs via fixed MACs + router DHCP reservations.
   control_plane_mac_addresses = local.control_node_macs
   worker_mac_addresses        = local.worker_node_macs

@@ -1,0 +1,75 @@
+# Example environment-specific overrides for the Talos cluster.
+# Copy to terraform.tfvars and fill in for your environment:
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# The real terraform.tfvars is gitignored (may contain infrastructure details).
+
+# ─── Cluster configuration ────────────────────────────────────────────────
+
+cluster_name  = "my-cluster"
+talos_version = "1.13.0"
+
+# Factory schematic with qemu-guest-agent + iscsi-tools + util-linux-tools
+# (the last two are required by Longhorn). Regenerate at factory.talos.dev if
+# extensions change. NOTE: changing this reinstalls all nodes (new image).
+talos_schematic_id = "88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b"
+
+# Map of node name -> Proxmox host the VM lands on. Spread across multiple
+# physical hosts for true HA (a single host is a SPOF).
+control_nodes = {
+  "my-control-0" = "pve1"
+  "my-control-1" = "pve1"
+  "my-control-2" = "pve1"
+}
+
+worker_nodes = {
+  "my-worker-0" = "pve1"
+  "my-worker-1" = "pve1"
+  "my-worker-2" = "pve1"
+}
+
+# ─── Compute (VM sizing) ──────────────────────────────────────────────────
+# Keep totals within the host budget when VMs share one Proxmox host.
+
+control_vm_cores  = 4
+worker_vm_cores   = 4
+control_vm_memory = 4096
+worker_vm_memory  = 4096
+
+# ─── Network ──────────────────────────────────────────────────────────────
+# Node NICs attach to this bridge. Leave network_vlan_id unset (null) for an
+# untagged LAN, or set it to tag the NICs onto an isolated VLAN.
+network_bridge = "vmbr0"
+# network_vlan_id = 88
+
+# ─── Storage ──────────────────────────────────────────────────────────────
+
+control_disk_size = 20
+worker_disk_size  = 20 # Longhorn replicas live on the worker disk; size accordingly
+image_datastore   = "local-lvm"
+iso_datastore     = "local"
+
+# ─── Persistent storage (CSI) ─────────────────────────────────────────────
+# NFS export backing the `nfs` StorageClass (csi-driver-nfs). Point these at
+# the file server's NFS share, reachable from the worker subnet.
+nfs_server = "192.168.1.10"
+nfs_share  = "/mnt/pool/k8s"
+
+# ─── Proxmox connection ───────────────────────────────────────────────────
+
+# Use the host IP on the native API port (:8006), not a reverse-proxied DNS
+# name on :443 (an Apache proxy that does NOT forward /api2 returns 404).
+proxmox_endpoint = "https://192.168.1.2:8006"
+# proxmox_api_token is intentionally NOT set here — it is a secret.
+# Provide it via the environment instead (tfvars would override the env var):
+#   export TF_VAR_proxmox_api_token='terraform@pam!provision=<uuid>'
+# insecure = true when :8006 serves Proxmox's self-signed cert (the IP won't
+# match it).
+proxmox_insecure        = true
+proxmox_ssh_agent       = false
+proxmox_ssh_private_key = "~/.ssh/id_ed25519"
+proxmox_ssh_username    = "root"
+
+# Note: module source and version must be literal values in Terraform.
+# They are hardcoded in main.tf and documented here for reference:
+#   source = "git::https://github.com/vetlmetl/terraform-proxmox-talos.git?ref=v2.0.0"
