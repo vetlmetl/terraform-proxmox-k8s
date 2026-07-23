@@ -71,7 +71,7 @@ module "talos" {
   # HA Kubernetes API endpoint via a shared Talos VIP. See cluster_network.tf.
   # Workers use the module's default machine config patch (install disk only).
   cluster_endpoint               = "https://${local.cluster_vip}:6443"
-  control_machine_config_patches = local.control_shared_patches
+  control_machine_config_patches = concat(local.control_shared_patches, local.cluster_addon_patches)
 }
 
 # ─── Outputs ───────────────────────────────────────────────────────────────
