@@ -27,8 +27,11 @@ terraform {
       version = "0.109.0"
     }
     talos = {
-      source  = "siderolabs/talos"
-      version = "0.11.0"
+      source = "siderolabs/talos"
+      # 0.12.0 fixes the machine_configuration_hash "inconsistent final plan"
+      # that used to break a whole-cluster rebuild (upstream #352, and the
+      # #388 regression on the 0.12.0 alphas).
+      version = "0.12.0"
     }
   }
 }

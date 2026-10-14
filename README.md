@@ -178,25 +178,29 @@ should recover within a few seconds as the VIP moves.
 ## Rebuilding from scratch
 
 Anything that recreates every VM at once — a new `talos_schematic_id`, a Talos
-image change, or a `terraform destroy` — has to go in two steps. In one shot the
-Talos provider trips an inconsistent-plan error (node IPs aren't known at plan
-time), and the fresh cluster can be left unbootstrapped:
+image change, or a `terraform destroy` — used to need two applies. The Talos
+provider tripped an inconsistent-plan error on the machine config hash, because
+node IPs aren't known at plan time. That's fixed in provider 0.12.0, which is
+what I pin, so one apply does it now.
+
+What the provider fix doesn't cover is the bootstrap. `talos_machine_bootstrap`
+takes the primary control-plane IP and the machine secrets, and neither of those
+changes when the VMs underneath get replaced — the IP is pinned by DHCP
+reservation and the secrets don't depend on the VMs. So Terraform decides there's
+nothing to do, never re-runs `talosctl bootstrap`, and you get fresh disks with
+an uninitialised etcd and an API that never answers. Replacing the VMs in place
+means forcing it:
 
 ```bash
-# 1. Create the VMs first, so their IPs are known before the config step.
-terraform apply \
-  -target=module.talos.proxmox_virtual_environment_vm.talos_control_vm \
-  -target=module.talos.proxmox_virtual_environment_vm.talos_worker_vm
-
-# 2. Apply the rest (machine config, bootstrap, kubeconfig).
-terraform apply
-
-# 3. If the API never comes up (kubectl -> connection refused on VIP:6443 for
-#    more than ~5 min), the bootstrap resource went stale — force it:
 terraform apply \
   -replace='module.talos.talos_machine_bootstrap.talos_bootstrap' \
   -replace='module.talos.talos_cluster_kubeconfig.talos_kubeconfig'
 ```
+
+After a full `terraform destroy` the state is empty, the bootstrap gets created
+fresh, and a plain `terraform apply` is all you need. Either way give etcd and
+the apiserver a couple of minutes — a `connection refused` on `VIP:6443` right
+after bootstrap is normal.
 
 On a fresh cluster Talos fetches the `extra_manifest_urls` for me, so Argo CD and
 the storage/metrics add-ons come back on their own.
