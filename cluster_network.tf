@@ -4,28 +4,38 @@
 # module's guest-agent IP discovery (setting dhcp:false in Talos fights it and
 # can strand a node). A shared Talos VIP provides an HA Kubernetes API endpoint.
 #
+# The nodes live on the servers VLAN (20). Their NICs are tagged by Proxmox via
+# network_vlan_id, so the VLAN is a VM setting here, not something Talos knows
+# about.
+#
 # Before `terraform apply`, on the router/DHCP server:
-#   - exclude 192.168.88.200–.220 from the DHCP dynamic pool
+#   - exclude 10.10.20.200–.220 from the VLAN 20 DHCP dynamic pool
 #   - add static DHCP mappings: each MAC below -> its IP (.201–.206)
-#   - leave 192.168.88.200 free (managed by Talos as the floating VIP)
+#   - leave 10.10.20.200 free (managed by Talos as the floating VIP)
+#   - hand out 10.10.20.1 for DNS and NTP (the nodes take both from DHCP)
 
 locals {
-  cluster_vip = "192.168.88.200"
+  cluster_vip = "10.10.20.200"
 
   # Subnet the nodes (and the VIP) live on; passed to the module so it can select
   # each node's primary IP by subnet match rather than a fixed interface index.
-  node_ipv4_cidr = "192.168.88.0/24"
+  node_ipv4_cidr = "10.10.20.0/24"
 
   # MAC last octet mirrors the IP last octet for an obvious reservation mapping.
+  #
+  # The keys MUST match the keys of control_nodes / worker_nodes in
+  # terraform.tfvars. The module looks the MAC up by node name and falls back to
+  # null, so a typo here doesn't fail the plan — the VM just gets a random MAC,
+  # misses its DHCP reservation, and lands on a dynamic address.
   control_node_macs = {
-    "test-control-0" = "bc:24:11:88:02:01" # -> 192.168.88.201
-    "test-control-1" = "bc:24:11:88:02:02" # -> 192.168.88.202
-    "test-control-2" = "bc:24:11:88:02:03" # -> 192.168.88.203
+    "devops-control-0" = "bc:24:11:88:02:01" # -> 10.10.20.201
+    "devops-control-1" = "bc:24:11:88:02:02" # -> 10.10.20.202
+    "devops-control-2" = "bc:24:11:88:02:03" # -> 10.10.20.203
   }
   worker_node_macs = {
-    "test-worker-0" = "bc:24:11:88:02:04" # -> 192.168.88.204
-    "test-worker-1" = "bc:24:11:88:02:05" # -> 192.168.88.205
-    "test-worker-2" = "bc:24:11:88:02:06" # -> 192.168.88.206
+    "devops-worker-0" = "bc:24:11:88:02:04" # -> 10.10.20.204
+    "devops-worker-1" = "bc:24:11:88:02:05" # -> 10.10.20.205
+    "devops-worker-2" = "bc:24:11:88:02:06" # -> 10.10.20.206
   }
 
   # Shared control-plane patch: install disk, the VIP (dhcp stays TRUE so the

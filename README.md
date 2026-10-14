@@ -13,7 +13,7 @@ providers, and calls my own fork of the `bbtechsys/talos/proxmox` module.
 
 Three control-plane nodes and three workers, so etcd keeps quorum and the control
 plane survives a node dropping out. I reach the Kubernetes API through a shared
-Talos VIP (`192.168.88.200`) instead of any single node, so when the VM holding
+Talos VIP (`10.10.20.200`) instead of any single node, so when the VM holding
 the VIP goes away the address just moves and `kubectl` keeps working.
 
 Node IPs are predictable: every VM has a fixed MAC and my router hands out the
@@ -22,20 +22,26 @@ Talos' static-IP config fights the module's guest-agent IP discovery, and once
 stranded a node on me during a test, so reservations turned out to be the calmer
 path.
 
-| Role      | VM name        | IP               | MAC                 |
-| --------- | -------------- | ---------------- | ------------------- |
-| VIP (API) | —              | `192.168.88.200` | managed by Talos    |
-| control-0 | test-control-0 | `192.168.88.201` | `bc:24:11:88:02:01` |
-| control-1 | test-control-1 | `192.168.88.202` | `bc:24:11:88:02:02` |
-| control-2 | test-control-2 | `192.168.88.203` | `bc:24:11:88:02:03` |
-| worker-0  | test-worker-0  | `192.168.88.204` | `bc:24:11:88:02:04` |
-| worker-1  | test-worker-1  | `192.168.88.205` | `bc:24:11:88:02:05` |
-| worker-2  | test-worker-2  | `192.168.88.206` | `bc:24:11:88:02:06` |
+| Role      | VM name          | IP              | MAC                 |
+| --------- | ---------------- | --------------- | ------------------- |
+| VIP (API) | —                | `10.10.20.200`  | managed by Talos    |
+| control-0 | devops-control-0 | `10.10.20.201`  | `bc:24:11:88:02:01` |
+| control-1 | devops-control-1 | `10.10.20.202`  | `bc:24:11:88:02:02` |
+| control-2 | devops-control-2 | `10.10.20.203`  | `bc:24:11:88:02:03` |
+| worker-0  | devops-worker-0  | `10.10.20.204`  | `bc:24:11:88:02:04` |
+| worker-1  | devops-worker-1  | `10.10.20.205`  | `bc:24:11:88:02:05` |
+| worker-2  | devops-worker-2  | `10.10.20.206`  | `bc:24:11:88:02:06` |
 
 The VM names are the keys of `control_nodes` / `worker_nodes` in
-`terraform.tfvars`; Talos picks its own node hostnames. My gateway is
-`192.168.88.1` and DNS is `192.168.88.101`. All of this lives in
-`cluster_network.tf`.
+`terraform.tfvars`, and the MAC maps in `cluster_network.tf` are keyed by those
+same names — the module looks each MAC up by node name and quietly falls back to
+null, so a name that doesn't match costs you the reservation without failing the
+plan. Talos picks its own node hostnames.
+
+The nodes sit on my servers VLAN (20), which is why `network_vlan_id = 20`:
+`vmbr0` is a trunk, so Proxmox has to tag the NIC or the VM comes up in the
+native VLAN with no reservation waiting for it. Gateway and DNS are both
+`10.10.20.1`, handed out by DHCP. All of this lives in `cluster_network.tf`.
 
 ## How things get into the cluster
 
@@ -77,8 +83,14 @@ NFS is environment-specific, so I set `nfs_server` and `nfs_share` in
 `no_root_squash` (the provisioner makes per-volume subdirectories as root), e.g.:
 
 ```
-/srv/k8s  192.168.88.200/28(rw,sync,no_subtree_check,no_root_squash)
+/srv/k8s  10.10.20.200/29(rw,sync,no_subtree_check,no_root_squash)
 ```
+
+Mind the prefix. `exportfs` masks the address you give it, so a `/28` written
+from `.200` actually grants `.192–.207` — which reaches below my DHCP exclusion
+and would hand `no_root_squash` to anything that picked up a dynamic lease
+there. `/29` is aligned on `.200`, so it covers exactly the VIP and the six
+nodes and nothing else.
 
 The `nfs` StorageClass sets `mountPermissions: "0777"` so non-root pods can write,
 since NFS ignores `fsGroup`.
@@ -102,8 +114,9 @@ are gitignored, because they hold secrets or details of my network.
 - A Proxmox VE cluster reachable over the API, plus an API token.
 - An S3-compatible bucket for state (I've used MinIO and Garage).
 - `talosctl` and `kubectl`.
-- DHCP reservations for the MACs above, with `192.168.88.200–.220` kept out of the
-  dynamic pool and `.200` left unmapped for the VIP.
+- DHCP reservations for the MACs above on the servers VLAN, with
+  `10.10.20.200–.220` kept out of the dynamic pool and `.200` left unmapped for
+  the VIP.
 - An NFS server exporting a share to the node subnet, if you want the `nfs` class.
 
 Two secrets stay out of the files: the Proxmox API token and the S3 key for the
@@ -159,7 +172,7 @@ kubectl --kubeconfig kubeconfig get nodes -o wide
 ```
 
 Both outputs are sensitive and point at the VIP. To check the HA actually works,
-power off whichever control node currently holds `192.168.88.200` — `kubectl`
+power off whichever control node currently holds `10.10.20.200` — `kubectl`
 should recover within a few seconds as the VIP moves.
 
 ## Rebuilding from scratch

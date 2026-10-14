@@ -37,8 +37,9 @@ control_vm_memory = 4096
 worker_vm_memory  = 4096
 
 # ─── Network ──────────────────────────────────────────────────────────────
-# Node NICs attach to this bridge. Leave network_vlan_id unset (null) for an
-# untagged LAN, or set it to tag the NICs onto an isolated VLAN.
+# Node NICs attach to this bridge. Leave network_vlan_id unset (null) if the
+# bridge is an access port on the node LAN; set it if the bridge is a trunk, or
+# the VMs come up in the native VLAN with no DHCP reservation waiting for them.
 network_bridge = "vmbr0"
 # network_vlan_id = 88
 
