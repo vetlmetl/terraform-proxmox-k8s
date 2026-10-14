@@ -91,9 +91,10 @@ since NFS ignores `fsGroup`.
 - `storage.tf` — the worker Longhorn mount and the generated `nfs` StorageClass.
 - `extra_manifests.tf` — the `cluster.extraManifests` list (`extra_manifest_urls`).
 - `backend.hcl.example` — template for the backend config.
+- `.envrc.example` — template for the credentials direnv loads.
 
-`terraform.tfvars`, `backend.hcl`, every `*.tfstate`, and `.terraform/` are
-gitignored, because they hold secrets or details of my network.
+`terraform.tfvars`, `backend.hcl`, `.envrc`, every `*.tfstate`, and `.terraform/`
+are gitignored, because they hold secrets or details of my network.
 
 ## Before you apply
 
@@ -105,21 +106,40 @@ gitignored, because they hold secrets or details of my network.
   dynamic pool and `.200` left unmapped for the VIP.
 - An NFS server exporting a share to the node subnet, if you want the `nfs` class.
 
-The Proxmox API token does not go in `terraform.tfvars` (a tfvars value would
-shadow the environment). I pass it through the environment instead:
+Two secrets stay out of the files: the Proxmox API token and the S3 key for the
+state bucket. The token does not go in `terraform.tfvars` either, because a tfvars
+value would shadow the environment.
+
+Both live in a gitignored `.envrc` that [direnv](https://direnv.net) loads when I
+cd into the repo. Copy the template and fill it in:
 
 ```bash
-export TF_VAR_proxmox_api_token='terraform@pam!provision=<uuid>'
+cp .envrc.example .envrc
+chmod 600 .envrc
+direnv allow
 ```
 
-The S3 backend reads its credentials from the environment at init time:
+`.envrc.example` lists what goes in there and why, but the short version is the
+S3 key pair, the region, `AWS_ENDPOINT_URL_S3`, and `TF_VAR_proxmox_api_token`.
+
+This used to live in my `~/.zshrc`, and moving it out was overdue. An exported
+key pair and endpoint apply to every AWS-SDK tool in every shell, and I keep a
+second cluster whose state sits on a different S3-compatible service, so
+anything reading plain `AWS_*` was one forgotten `source` away from hitting one
+service with the other one's credentials. Note the template sets
+`AWS_ENDPOINT_URL_S3` and not the generic `AWS_ENDPOINT_URL`, which would
+redirect every AWS service rather than just S3. It also unsets the inherited
+`AWS_*` variables first, so whatever the parent shell had doesn't leak in.
+
+If you'd rather not use direnv, the file is plain `export` lines and sources fine
+on its own:
 
 ```bash
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-export AWS_DEFAULT_REGION=...
-export AWS_ENDPOINT_URL_S3=...
+set -a; . ./.envrc; set +a
 ```
+
+That's also what you need for anything non-interactive — cron, a CI job, a script
+— since direnv only hooks interactive shells.
 
 ## Running it
 

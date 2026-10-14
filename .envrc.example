@@ -1,0 +1,36 @@
+# Copy to .envrc, fill in the real values, then run: direnv allow
+#   cp .envrc.example .envrc && chmod 600 .envrc && direnv allow
+#
+# Plain export lines on purpose, so the file can also be sourced directly by
+# anything without the direnv hook - CI, a non-interactive shell, a script:
+#   set -a; . ./.envrc; set +a
+#
+# Why per-project and not ~/.zshrc: exported S3 credentials and endpoints apply to
+# every AWS-SDK tool in every shell. I run a second cluster against a different
+# S3-compatible backend, and that is how state ends up written to the wrong bucket,
+# or sent to a plain-HTTP endpoint while the config claims TLS.
+
+# Unset first, not just "do not set". A parent shell may already export an endpoint
+# for a different S3 service, and an endpoint variable silently redirects every
+# request no matter what the backend block says. Unsetting makes this project's
+# environment deterministic regardless of what it inherited.
+unset AWS_ENDPOINT_URL
+unset AWS_ENDPOINT_URL_S3
+unset AWS_PROFILE
+unset AWS_SESSION_TOKEN
+
+# Static access key for the terraform state bucket, plus the endpoint it lives on.
+# My bucket is on an S3-compatible service rather than AWS, so the SDK needs the
+# endpoint spelled out - the backend block in main.tf deliberately doesn't set it,
+# since only the bucket name goes in backend.hcl.
+#
+# Use the S3-specific variable, not the generic AWS_ENDPOINT_URL: the generic one
+# redirects every AWS service the SDK talks to, which is far more than you want.
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_DEFAULT_REGION="..."
+export AWS_ENDPOINT_URL_S3="https://s3.example.com"
+
+# Proxmox API token for the bpg provider. It goes through the environment rather
+# than terraform.tfvars, because a tfvars value would shadow it.
+export TF_VAR_proxmox_api_token="terraform@pam!provision=<uuid>"

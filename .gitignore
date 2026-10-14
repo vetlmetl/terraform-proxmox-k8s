@@ -25,3 +25,9 @@ kubeconfig
 kubeconfig.yaml
 talosconfig
 talosconfig.yaml
+
+# Per-project environment, loaded by direnv. Holds the S3 access key for the
+# terraform state backend, so it never gets committed. .envrc.example documents
+# what belongs in it.
+.envrc
+.direnv/
