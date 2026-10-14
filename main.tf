@@ -55,7 +55,7 @@ module "talos" {
   # Personal fork of bbtechsys/talos/proxmox, pinned to a release tag. Adds the
   # required cluster_endpoint used below (not in the registry module).
   # Bump the tag to adopt fork changes.
-  source = "git::https://github.com/vetlmetl/terraform-proxmox-talos.git?ref=v2.0.0"
+  source = "git::https://github.com/vetlmetl/terraform-proxmox-talos.git?ref=v3.0.0"
 
   talos_cluster_name = var.cluster_name
   talos_version      = var.talos_version
